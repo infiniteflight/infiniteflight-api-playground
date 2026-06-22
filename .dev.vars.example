@@ -1,0 +1,11 @@
+# Copy to .dev.vars for `npm run cf:dev`.
+IF_CLIENT_ID=ifc_your_client_id
+IF_CLIENT_SECRET=your_one_time_client_secret
+
+# Register this exact redirect URI on the OAuth client when testing Pages locally.
+APP_BASE_URL=http://localhost:8788
+IF_REDIRECT_URI=http://localhost:8788/
+
+IF_AUTH_BASE=https://api.infiniteflight.com/auth
+IF_PUBLIC_API_BASE=https://api.infiniteflight.com
+IF_SCOPES=openid profile offline_access live:organizations.read live:aircraft.read live:schedules.read
