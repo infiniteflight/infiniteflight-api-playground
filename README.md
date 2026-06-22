@@ -1,6 +1,6 @@
 # Flight Tracker Sample
 
-This sample demonstrates PublicApi through one OAuth-only, map-first app:
+This sample demonstrates PublicApi through one OAuth-only, map-first Vite + React app:
 
 1. Redirect the user to Infinite Flight OAuth.
 2. Complete authorization-code + PKCE login.
@@ -17,8 +17,9 @@ The browser never receives the OAuth client secret. This sample intentionally av
 
 ```powershell
 cd C:\Fds\infiniteflight-api-samples\flight-tracker
+npm install
 copy .env.example .env
-npm start
+npm run dev
 ```
 
 Then open `http://localhost:5117`.
@@ -36,7 +37,8 @@ Copy the generated OAuth client ID and one-time secret into `.env`.
 
 The hosted demo uses Cloudflare Pages for static files and Pages Functions for OAuth token exchange:
 
-- Static app: `public/`
+- React app source: `src/`
+- Static build output: `dist/`
 - Runtime config: `functions/api/config.js`
 - Authorization-code exchange: `functions/api/oauth/token.js`
 - Refresh-token exchange: `functions/api/oauth/refresh.js`
@@ -89,8 +91,8 @@ npm run cf:deploy
 In Cloudflare Pages, connect the same GitHub repository and use:
 
 ```text
-Build command: none
-Build output directory: public
+Build command: npm run build
+Build output directory: dist
 ```
 
 Pages Functions are picked up from `functions/`.
@@ -102,6 +104,7 @@ This folder is ready to be published as its own GitHub repository. Do not commit
 ```powershell
 cd C:\Fds\infiniteflight-api-samples\flight-tracker
 git init
+npm install
 git add .
 git commit -m "Add Infinite Flight API Playground sample"
 gh repo create infiniteflight-api-playground --public --source=. --remote=origin --push

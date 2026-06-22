@@ -5,12 +5,23 @@
   "type": "module",
   "description": "Map-first Infinite Flight OAuth-only PublicApi flight tracker sample.",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "cf:dev": "npx wrangler pages dev public",
-    "cf:deploy": "npx wrangler pages deploy public"
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "cf:dev": "npm run build && wrangler pages dev dist",
+    "cf:deploy": "npm run build && wrangler pages deploy dist",
+    "check": "node --check vite.config.js && node --check functions/_oauth.js && node --check functions/api/config.js && node --check functions/api/oauth/token.js && node --check functions/api/oauth/refresh.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.2.7",
+    "wrangler": "^4.53.0"
   }
 }

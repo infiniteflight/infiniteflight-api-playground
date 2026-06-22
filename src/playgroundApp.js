@@ -16,33 +16,37 @@ const JSON_MAX_RENDERED_CHILDREN = 180;
 let config = window.IF_SAMPLE_CONFIG || {};
 const L = window.L;
 
-const els = {
-  map: document.querySelector("#map"),
-  apiStatus: document.querySelector("#apiStatus"),
-  loginButton: document.querySelector("#loginButton"),
-  logoutButton: document.querySelector("#logoutButton"),
-  profileName: document.querySelector("#profileName"),
-  tokenExpiry: document.querySelector("#tokenExpiry"),
-  profileAvatar: document.querySelector("#profileAvatar"),
-  layoutButtons: Array.from(document.querySelectorAll("[data-layout-toggle]")),
-  layoutResetButton: document.querySelector("[data-layout-reset]"),
-  resizeHandles: Array.from(document.querySelectorAll("[data-resize-pane]")),
-  sessionSelect: document.querySelector("#sessionSelect"),
-  endpointCount: document.querySelector("#endpointCount"),
-  endpointSearch: document.querySelector("#endpointSearch"),
-  catalog: document.querySelector("#catalog"),
-  mapTitle: document.querySelector("#mapTitle"),
-  mapCount: document.querySelector("#mapCount"),
-  inspectorTabs: Array.from(document.querySelectorAll("[data-inspector-tab]")),
-  inspectorBody: document.querySelector("#inspectorBody"),
-  networkDrawer: document.querySelector("#networkDrawer"),
-  drawerHead: document.querySelector("#drawerHead"),
-  drawerToggle: document.querySelector("#drawerToggle"),
-  networkFilters: document.querySelector("#networkFilters"),
-  networkStat: document.querySelector("#networkStat"),
-  clearLogButton: document.querySelector("#clearLogButton"),
-  logRows: document.querySelector("#logRows")
-};
+let els = null;
+
+function collectElements() {
+  return {
+    map: document.querySelector("#map"),
+    apiStatus: document.querySelector("#apiStatus"),
+    loginButton: document.querySelector("#loginButton"),
+    logoutButton: document.querySelector("#logoutButton"),
+    profileName: document.querySelector("#profileName"),
+    tokenExpiry: document.querySelector("#tokenExpiry"),
+    profileAvatar: document.querySelector("#profileAvatar"),
+    layoutButtons: Array.from(document.querySelectorAll("[data-layout-toggle]")),
+    layoutResetButton: document.querySelector("[data-layout-reset]"),
+    resizeHandles: Array.from(document.querySelectorAll("[data-resize-pane]")),
+    sessionSelect: document.querySelector("#sessionSelect"),
+    endpointCount: document.querySelector("#endpointCount"),
+    endpointSearch: document.querySelector("#endpointSearch"),
+    catalog: document.querySelector("#catalog"),
+    mapTitle: document.querySelector("#mapTitle"),
+    mapCount: document.querySelector("#mapCount"),
+    inspectorTabs: Array.from(document.querySelectorAll("[data-inspector-tab]")),
+    inspectorBody: document.querySelector("#inspectorBody"),
+    networkDrawer: document.querySelector("#networkDrawer"),
+    drawerHead: document.querySelector("#drawerHead"),
+    drawerToggle: document.querySelector("#drawerToggle"),
+    networkFilters: document.querySelector("#networkFilters"),
+    networkStat: document.querySelector("#networkStat"),
+    clearLogButton: document.querySelector("#clearLogButton"),
+    logRows: document.querySelector("#logRows")
+  };
+}
 
 const state = {
   sessions: [],
@@ -366,9 +370,12 @@ const AircraftCanvasLayer = L.Layer.extend({
   }
 });
 
-boot();
+export async function bootPlayground() {
+  if (map) {
+    return;
+  }
 
-async function boot() {
+  els = collectElements();
   await loadRuntimeConfig();
   applyLayout();
   setupMap();
