@@ -1,0 +1,28 @@
+{
+  "name": "@infiniteflight/api-sample-flight-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Map-first Infinite Flight OAuth-only PublicApi flight tracker sample.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "cf:dev": "npm run build && wrangler pages dev dist",
+    "cf:deploy": "npm run build && wrangler pages deploy dist",
+    "check": "node --check vite.config.js && node --check functions/_oauth.js && node --check functions/api/config.js && node --check functions/api/oauth/token.js && node --check functions/api/oauth/refresh.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3",
+    "vite": "^8.1.2",
+    "wrangler": "^4.106.0"
+  }
+}
