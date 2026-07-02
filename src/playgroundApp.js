@@ -76,7 +76,16 @@ function collectElements() {
     networkFilters: document.querySelector("#networkFilters"),
     networkStat: document.querySelector("#networkStat"),
     clearLogButton: document.querySelector("#clearLogButton"),
-    logRows: document.querySelector("#logRows")
+    logRows: document.querySelector("#logRows"),
+    authErrorDialog: document.querySelector("#authErrorDialog"),
+    authErrorTitle: document.querySelector("#authErrorTitle"),
+    authErrorDescription: document.querySelector("#authErrorDescription"),
+    authErrorCode: document.querySelector("#authErrorCode"),
+    authErrorUriRow: document.querySelector("#authErrorUriRow"),
+    authErrorUri: document.querySelector("#authErrorUri"),
+    authErrorCloseButton: document.querySelector("#authErrorCloseButton"),
+    authErrorDismissButton: document.querySelector("#authErrorDismissButton"),
+    authErrorRetryButton: document.querySelector("#authErrorRetryButton")
   };
 }
 
@@ -486,11 +495,19 @@ function setupMap() {
 function setupEvents() {
   els.loginButton.addEventListener("click", () => void startLogin());
   els.logoutButton.addEventListener("click", logout);
+  els.authErrorCloseButton.addEventListener("click", hideAuthError);
+  els.authErrorDismissButton.addEventListener("click", hideAuthError);
+  els.authErrorRetryButton.addEventListener("click", () => void startLogin());
   els.sessionSelect.addEventListener("change", () => void selectSessionById(els.sessionSelect.value));
   els.endpointSearch.addEventListener("input", () => renderCatalog());
   els.contextToggleButton.addEventListener("click", () => setContextOpen(!state.contextOpen));
   els.contextCloseButton.addEventListener("click", () => setContextOpen(false));
   document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !els.authErrorDialog.hidden) {
+      hideAuthError();
+      return;
+    }
+
     if (event.key === "Escape" && state.contextOpen) {
       setContextOpen(false);
     }
@@ -826,8 +843,17 @@ async function completeOAuthCallbackIfNeeded() {
   if (error) {
     localStorage.removeItem(OAUTH_STORAGE_KEY);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    const errorDescription = params.get("error_description") || `Sign in failed: ${error}`;
+    const authError = createAppError("oauth_error", errorDescription);
+    authError.oauth = {
+      error,
+      errorDescription,
+      errorUri: params.get("error_uri"),
+      issuer: params.get("iss"),
+      state: params.get("state")
+    };
     history.replaceState(null, "", "/");
-    throw createAppError("oauth_error", params.get("error_description") || `Sign in failed: ${error}`);
+    throw authError;
   }
 
   const code = params.get("code");
@@ -846,13 +872,27 @@ async function completeOAuthCallbackIfNeeded() {
   }
 
   setApiStatus("Completing sign in...", "warn");
-  const tokenSet = await requestJson("/api/oauth/token", {
-    method: "POST",
-    body: JSON.stringify({
-      code,
-      codeVerifier: oauthState.codeVerifier
-    })
-  });
+  let tokenSet;
+  try {
+    tokenSet = await requestJson("/api/oauth/token", {
+      method: "POST",
+      body: JSON.stringify({
+        code,
+        codeVerifier: oauthState.codeVerifier
+      })
+    });
+  } catch (error) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    history.replaceState(null, "", "/");
+
+    const errorDescription = error?.message || "The authorization code could not be exchanged for tokens.";
+    const authError = createAppError("oauth_error", errorDescription);
+    authError.oauth = {
+      error: "token_exchange_failed",
+      errorDescription
+    };
+    throw authError;
+  }
 
   saveTokenSet(tokenSet);
   history.replaceState(null, "", "/");
@@ -2424,6 +2464,10 @@ function setApiStatus(message, kind = "ok") {
 }
 
 function handleDataLoadError(error) {
+  if (error?.code === "oauth_error" || error?.code === "oauth_state") {
+    showAuthError(error);
+  }
+
   if (error?.code === "not_signed_in" || error?.code === "token_expired") {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     renderAuthState();
@@ -2433,6 +2477,56 @@ function handleDataLoadError(error) {
   }
 
   setApiStatus(error?.message || "Request failed", "err");
+}
+
+function showAuthError(error) {
+  if (!els?.authErrorDialog) {
+    return;
+  }
+
+  const oauth = error.oauth || {};
+  const errorCode = oauth.error || error.code || "oauth_error";
+  const description = oauth.errorDescription || error.message || "The authorization server rejected the sign-in request.";
+
+  els.authErrorTitle.textContent = authErrorTitleFor(errorCode);
+  els.authErrorDescription.textContent = description;
+  els.authErrorCode.textContent = errorCode;
+
+  if (oauth.errorUri) {
+    els.authErrorUri.href = oauth.errorUri;
+    els.authErrorUri.textContent = oauth.errorUri.replace(/^https?:\/\//, "");
+    els.authErrorUriRow.hidden = false;
+  } else {
+    els.authErrorUri.removeAttribute("href");
+    els.authErrorUri.textContent = "Not provided";
+    els.authErrorUriRow.hidden = true;
+  }
+
+  els.authErrorDialog.hidden = false;
+  document.body.classList.add("auth-error-open");
+  els.authErrorRetryButton.focus();
+}
+
+function hideAuthError() {
+  if (!els?.authErrorDialog) {
+    return;
+  }
+
+  els.authErrorDialog.hidden = true;
+  document.body.classList.remove("auth-error-open");
+}
+
+function authErrorTitleFor(errorCode) {
+  switch (errorCode) {
+    case "access_denied":
+      return "This app is still in testing";
+    case "invalid_scope":
+      return "The requested scopes are not allowed";
+    case "invalid_request":
+      return "The authorization request is invalid";
+    default:
+      return "Unable to complete OAuth sign in";
+  }
 }
 
 function updateTokenCountdown() {

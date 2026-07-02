@@ -1,4 +1,4 @@
-import { Braces, ChevronDown, Crosshair, Github, ListTree, Map, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw } from "lucide-react";
+import { AlertTriangle, Braces, ChevronDown, Crosshair, Github, ListTree, Map, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw, X } from "lucide-react";
 
 export default function App() {
   return (
@@ -251,6 +251,36 @@ export default function App() {
           <div id="logRows"><div className="log-empty">No requests yet. Fire one from the catalog.</div></div>
         </div>
       </section>
+
+      <div className="auth-error-backdrop" id="authErrorDialog" role="dialog" aria-modal="true" aria-labelledby="authErrorTitle" hidden>
+        <div className="auth-error-card">
+          <div className="auth-error-icon" aria-hidden="true">
+            <AlertTriangle />
+          </div>
+          <button className="auth-error-close" type="button" id="authErrorCloseButton" aria-label="Close sign-in error">
+            <X aria-hidden="true" />
+          </button>
+          <span className="auth-error-kicker">Sign-in failed</span>
+          <h2 id="authErrorTitle">Unable to complete OAuth sign in</h2>
+          <p id="authErrorDescription">
+            The authorization server returned an error. Review the details below and try again.
+          </p>
+          <div className="auth-error-details">
+            <div>
+              <span>Error</span>
+              <code id="authErrorCode">unknown_error</code>
+            </div>
+            <div id="authErrorUriRow" hidden>
+              <span>Reference</span>
+              <a id="authErrorUri" href="#" target="_blank" rel="noreferrer">Open documentation</a>
+            </div>
+          </div>
+          <div className="auth-error-actions">
+            <button className="auth-error-secondary" type="button" id="authErrorDismissButton">Dismiss</button>
+            <button className="auth-error-primary" type="button" id="authErrorRetryButton">Try sign in again</button>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
