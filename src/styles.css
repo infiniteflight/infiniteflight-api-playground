@@ -380,6 +380,7 @@ input {
   background: var(--amber);
   color: #111;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1744,6 +1745,81 @@ body.hide-bottom .drawer {
 
   .github-link span {
     display: none;
+  }
+}
+
+@media (max-width: 1920px) and (min-width: 821px) {
+  .topbar {
+    gap: 12px;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .top-spacer {
+    min-width: 0;
+  }
+
+  .brand {
+    min-width: 280px;
+  }
+
+  .brand-logo {
+    width: 146px;
+  }
+
+  .session-control {
+    flex-basis: 300px;
+    min-width: 210px;
+  }
+
+  .auth-button {
+    order: 8;
+  }
+
+  .account-chip {
+    order: 9;
+    flex-basis: 146px;
+    min-width: 92px;
+    gap: 9px;
+  }
+}
+
+@media (max-width: 1520px) and (min-width: 821px) {
+  .account-copy span {
+    display: none;
+  }
+}
+
+@media (max-width: 1360px) and (min-width: 821px) {
+  .brand {
+    min-width: 236px;
+  }
+
+  .brand-logo {
+    width: 132px;
+  }
+
+  .brand-product {
+    padding-left: 10px;
+  }
+
+  .status-pill {
+    max-width: 176px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-control {
+    flex-basis: 248px;
+    min-width: 180px;
+  }
+
+  .layout-controls {
+    padding: 2px;
+  }
+
+  .account-chip {
+    flex-basis: 112px;
   }
 }
 
