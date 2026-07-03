@@ -1,6 +1,7 @@
 const TOKEN_STORAGE_KEY = "if.sample.flightTracker.tokens";
 const OAUTH_STORAGE_KEY = "if.sample.flightTracker.oauth";
 const OAUTH_CLIENT_STORAGE_KEY = "if.sample.flightTracker.oauthClient";
+const FORCE_CONSENT_STORAGE_KEY = "if.sample.flightTracker.forceConsent";
 const LAYOUT_STORAGE_KEY = "if.sample.flightTracker.layout";
 const SELECTED_SESSION_STORAGE_KEY = "if.sample.flightTracker.selectedSessionId";
 const KNOWN_OAUTH_SCOPES = [
@@ -36,6 +37,7 @@ function collectElements() {
     apiStatus: document.querySelector("#apiStatus"),
     clientModeGroup: document.querySelector("#clientModeGroup"),
     clientModeButtons: Array.from(document.querySelectorAll("[data-oauth-client]")),
+    forceConsentButton: document.querySelector("#forceConsentButton"),
     loginButton: document.querySelector("#loginButton"),
     logoutButton: document.querySelector("#logoutButton"),
     profileName: document.querySelector("#profileName"),
@@ -122,6 +124,7 @@ const state = {
   inspectorTab: "response",
   mobilePane: "map",
   contextOpen: false,
+  forceConsent: localStorage.getItem(FORCE_CONSENT_STORAGE_KEY) === "true",
   collapsedGroups: new Set(),
   layout: loadLayout()
 };
@@ -482,6 +485,14 @@ function renderRuntimeConfig() {
     button.setAttribute("aria-pressed", String(isSelected));
     button.title = clientModeTitle(client);
   });
+
+  if (els.forceConsentButton) {
+    els.forceConsentButton.classList.toggle("active", state.forceConsent);
+    els.forceConsentButton.setAttribute("aria-pressed", String(state.forceConsent));
+    els.forceConsentButton.title = state.forceConsent
+      ? "The next OAuth request will include prompt=consent and force the authorize button."
+      : "Add prompt=consent so OAuth always shows an authorize button before redirecting.";
+  }
 }
 
 function normalizeRuntimeConfig(rawConfig) {
@@ -609,6 +620,7 @@ function setupEvents() {
   els.clientModeButtons.forEach(button => {
     button.addEventListener("click", () => selectOAuthClient(button.dataset.oauthClient));
   });
+  els.forceConsentButton?.addEventListener("click", toggleForceConsent);
   els.authErrorCloseButton.addEventListener("click", hideAuthError);
   els.authErrorDismissButton.addEventListener("click", hideAuthError);
   els.authErrorRetryButton.addEventListener("click", () => void startLogin());
@@ -948,8 +960,18 @@ async function startLogin() {
   authorizeUrl.searchParams.set("state", stateToken);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
+  if (state.forceConsent) {
+    authorizeUrl.searchParams.set("prompt", "consent");
+  }
 
   location.assign(authorizeUrl.href);
+}
+
+function toggleForceConsent() {
+  state.forceConsent = !state.forceConsent;
+  localStorage.setItem(FORCE_CONSENT_STORAGE_KEY, String(state.forceConsent));
+  renderRuntimeConfig();
+  setApiStatus(state.forceConsent ? "OAuth will show consent button" : "OAuth prompt optional", state.forceConsent ? "warn" : "ok");
 }
 
 async function completeOAuthCallbackIfNeeded() {

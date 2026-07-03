@@ -1,4 +1,4 @@
-import { AlertTriangle, Braces, ChevronDown, Crosshair, Github, ListTree, Map, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Braces, ChevronDown, Crosshair, Github, ListTree, Map, MousePointerClick, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw, X } from "lucide-react";
 
 export default function App() {
   return (
@@ -22,6 +22,17 @@ export default function App() {
             <strong>Public PKCE</strong>
           </button>
         </div>
+        <button
+          className="prompt-toggle"
+          type="button"
+          id="forceConsentButton"
+          aria-pressed="false"
+          title="Add prompt=consent so OAuth always shows an authorize button before redirecting."
+        >
+          <MousePointerClick className="prompt-toggle-icon" aria-hidden="true" />
+          <span>prompt=consent</span>
+          <strong>Consent button</strong>
+        </button>
         <label className="session-control" htmlFor="sessionSelect">
           <span>Session</span>
           <select id="sessionSelect" disabled>

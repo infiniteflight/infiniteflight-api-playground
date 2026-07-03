@@ -115,6 +115,8 @@ Configure both `IF_CONFIDENTIAL_CLIENT_ID`/`IF_CONFIDENTIAL_CLIENT_SECRET` and `
 
 The legacy single-client variables still work for quick local testing: set `IF_OAUTH_CLIENT_TYPE=confidential` or `IF_OAUTH_CLIENT_TYPE=public` with `IF_CLIENT_ID`, and include `IF_CLIENT_SECRET` only for confidential clients.
 
+Use the **Consent button** toggle in the playground to add `prompt=consent` to the authorization request. This is useful for testing iOS Universal Links or other redirect flows that need the final redirect to happen immediately after a user presses an authorize button.
+
 ## For Developers
 
 This repository contains the source for the hosted playground. Most users should use the hosted app above.
