@@ -35,9 +35,7 @@ function collectElements() {
   return {
     map: document.querySelector("#map"),
     apiStatus: document.querySelector("#apiStatus"),
-    clientModeGroup: document.querySelector("#clientModeGroup"),
-    clientModeButtons: Array.from(document.querySelectorAll("[data-oauth-client]")),
-    forceConsentButton: document.querySelector("#forceConsentButton"),
+    oauthModeSelect: document.querySelector("#oauthModeSelect"),
     loginButton: document.querySelector("#loginButton"),
     logoutButton: document.querySelector("#logoutButton"),
     profileName: document.querySelector("#profileName"),
@@ -470,29 +468,28 @@ async function loadRuntimeConfig() {
 }
 
 function renderRuntimeConfig() {
-  if (!els.clientModeButtons.length) {
+  if (!els.oauthModeSelect) {
     return;
   }
 
-  const clients = getOAuthClients();
-  els.clientModeButtons.forEach(button => {
-    const client = clients.find(item => item.key === button.dataset.oauthClient);
-    const isSelected = client?.key === config.clientKey;
-    const isConfigured = Boolean(client?.configured);
-    button.classList.toggle("active", isSelected);
-    button.classList.toggle("missing", !isConfigured);
-    button.disabled = !isConfigured;
-    button.setAttribute("aria-pressed", String(isSelected));
-    button.title = clientModeTitle(client);
-  });
+  const selectedValue = oauthModeValue(config.clientKey, state.forceConsent);
+  els.oauthModeSelect.replaceChildren(...oauthModeOptions().map(option => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.label;
+    element.disabled = option.disabled;
+    return element;
+  }));
 
-  if (els.forceConsentButton) {
-    els.forceConsentButton.classList.toggle("active", state.forceConsent);
-    els.forceConsentButton.setAttribute("aria-pressed", String(state.forceConsent));
-    els.forceConsentButton.title = state.forceConsent
-      ? "The next OAuth request will include prompt=consent and force the authorize button."
-      : "Add prompt=consent so OAuth always shows an authorize button before redirecting.";
+  const hasSelectedOption = Array.from(els.oauthModeSelect.options).some(option => option.value === selectedValue);
+  if (hasSelectedOption) {
+    els.oauthModeSelect.value = selectedValue;
   }
+
+  els.oauthModeSelect.disabled = !getOAuthClients().some(client => client.configured);
+  els.oauthModeSelect.title = state.forceConsent
+    ? "The next OAuth request will include prompt=consent and force the authorize button."
+    : clientModeTitle(config);
 }
 
 function normalizeRuntimeConfig(rawConfig) {
@@ -536,6 +533,7 @@ function normalizeOAuthClientConfig(client) {
 function selectOAuthClient(clientKey, options = {}) {
   const selectedClient = pickOAuthClient(getOAuthClients(), clientKey);
   if (!selectedClient || selectedClient.key === config.clientKey) {
+    renderRuntimeConfig();
     return;
   }
 
@@ -557,6 +555,50 @@ function selectOAuthClient(clientKey, options = {}) {
   }
 
   renderRuntimeConfig();
+}
+
+function oauthModeOptions() {
+  const clients = getOAuthClients();
+  if (!clients.length) {
+    return [{ value: "missing:default", label: "OAuth env missing", disabled: true }];
+  }
+
+  return clients.flatMap(client => {
+    const baseLabel = client.label || (client.clientType === "public" ? "Public PKCE" : "Confidential");
+    return [
+      {
+        value: oauthModeValue(client.key, false),
+        label: client.configured ? baseLabel : `${baseLabel} not configured`,
+        disabled: !client.configured
+      },
+      {
+        value: oauthModeValue(client.key, true),
+        label: client.configured ? `${baseLabel} + consent button` : `${baseLabel} + consent not configured`,
+        disabled: !client.configured
+      }
+    ];
+  });
+}
+
+function oauthModeValue(clientKey, forceConsent) {
+  return `${clientKey || "confidential"}:${forceConsent ? "consent" : "default"}`;
+}
+
+function parseOAuthMode(value) {
+  const [clientKey, promptMode] = String(value || "").split(":");
+  return {
+    clientKey: clientKey || "confidential",
+    forceConsent: promptMode === "consent"
+  };
+}
+
+function selectOAuthMode(value) {
+  const mode = parseOAuthMode(value);
+  state.forceConsent = mode.forceConsent;
+  localStorage.setItem(FORCE_CONSENT_STORAGE_KEY, String(state.forceConsent));
+  selectOAuthClient(mode.clientKey);
+  renderRuntimeConfig();
+  setApiStatus(state.forceConsent ? "OAuth will show consent button" : "OAuth prompt optional", state.forceConsent ? "warn" : "ok");
 }
 
 function getOAuthClients() {
@@ -617,10 +659,7 @@ function setupMap() {
 function setupEvents() {
   els.loginButton.addEventListener("click", () => void startLogin());
   els.logoutButton.addEventListener("click", logout);
-  els.clientModeButtons.forEach(button => {
-    button.addEventListener("click", () => selectOAuthClient(button.dataset.oauthClient));
-  });
-  els.forceConsentButton?.addEventListener("click", toggleForceConsent);
+  els.oauthModeSelect?.addEventListener("change", () => selectOAuthMode(els.oauthModeSelect.value));
   els.authErrorCloseButton.addEventListener("click", hideAuthError);
   els.authErrorDismissButton.addEventListener("click", hideAuthError);
   els.authErrorRetryButton.addEventListener("click", () => void startLogin());
@@ -945,18 +984,20 @@ async function startLogin() {
   const stateToken = randomToken(32);
   const codeVerifier = randomToken(64);
   const codeChallenge = await createCodeChallenge(codeVerifier);
+  const oauthClient = oauthClientSnapshot(config);
   localStorage.setItem(OAUTH_STORAGE_KEY, JSON.stringify({
     state: stateToken,
     codeVerifier,
-    clientKey: config.clientKey,
+    clientKey: oauthClient.key,
+    client: oauthClient,
     createdAt: Date.now()
   }));
 
-  const authorizeUrl = new URL(`${trimTrailingSlash(config.authBaseUrl)}/v2/connect/authorize`);
+  const authorizeUrl = new URL(`${trimTrailingSlash(oauthClient.authBaseUrl)}/v2/connect/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("client_id", config.clientId);
-  authorizeUrl.searchParams.set("redirect_uri", config.redirectUri);
-  authorizeUrl.searchParams.set("scope", normalizeScopes(config.scopes));
+  authorizeUrl.searchParams.set("client_id", oauthClient.clientId);
+  authorizeUrl.searchParams.set("redirect_uri", oauthClient.redirectUri);
+  authorizeUrl.searchParams.set("scope", normalizeScopes(oauthClient.scopes));
   authorizeUrl.searchParams.set("state", stateToken);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
@@ -967,11 +1008,19 @@ async function startLogin() {
   location.assign(authorizeUrl.href);
 }
 
-function toggleForceConsent() {
-  state.forceConsent = !state.forceConsent;
-  localStorage.setItem(FORCE_CONSENT_STORAGE_KEY, String(state.forceConsent));
-  renderRuntimeConfig();
-  setApiStatus(state.forceConsent ? "OAuth will show consent button" : "OAuth prompt optional", state.forceConsent ? "warn" : "ok");
+function oauthClientSnapshot(client) {
+  return {
+    key: client.clientKey || client.key,
+    clientType: client.clientType,
+    label: client.label,
+    tokenExchange: client.tokenExchange,
+    clientId: client.clientId,
+    redirectUri: client.redirectUri,
+    scopes: normalizeScopes(client.scopes),
+    authBaseUrl: trimTrailingSlash(client.authBaseUrl),
+    publicApiBaseUrl: normalizePublicApiBaseUrl(client.publicApiBaseUrl),
+    configured: Boolean(client.configured && client.clientId)
+  };
 }
 
 async function completeOAuthCallbackIfNeeded() {
@@ -1008,24 +1057,25 @@ async function completeOAuthCallbackIfNeeded() {
     throw createAppError("oauth_state", "Sign in failed: invalid OAuth state.");
   }
 
-  selectOAuthClient(oauthState.clientKey, { keepToken: true });
+  const oauthClient = normalizeOAuthClientConfig(oauthState.client || pickOAuthClient(getOAuthClients(), oauthState.clientKey) || config);
+  selectOAuthClient(oauthClient.key, { keepToken: true });
   setApiStatus("Completing sign in...", "warn");
   let tokenSet;
   try {
-    tokenSet = isPublicOAuthClient(config)
+    tokenSet = isPublicOAuthClient(oauthClient)
       ? await requestDirectOAuthToken(new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: config.clientId,
+        client_id: oauthClient.clientId,
         code,
-        redirect_uri: config.redirectUri,
+        redirect_uri: oauthClient.redirectUri,
         code_verifier: oauthState.codeVerifier
-      }))
+      }), oauthClient)
       : await requestJson("/api/oauth/token", {
         method: "POST",
         body: JSON.stringify({
           code,
           codeVerifier: oauthState.codeVerifier,
-          clientKey: config.clientKey
+          clientKey: oauthClient.key
         })
       });
   } catch (error) {
@@ -1041,7 +1091,11 @@ async function completeOAuthCallbackIfNeeded() {
     throw authError;
   }
 
-  saveTokenSet(tokenSet);
+  saveTokenSet(tokenSet, {
+    clientKey: oauthClient.key,
+    clientType: oauthClient.clientType,
+    clientId: oauthClient.clientId
+  });
   history.replaceState(null, "", "/");
 }
 

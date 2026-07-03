@@ -1,4 +1,4 @@
-import { AlertTriangle, Braces, ChevronDown, Crosshair, Github, ListTree, Map, MousePointerClick, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Braces, ChevronDown, Crosshair, Github, ListTree, Map, PanelBottom, PanelLeft, PanelRight, RadioTower, RotateCcw, X } from "lucide-react";
 
 export default function App() {
   return (
@@ -12,27 +12,6 @@ export default function App() {
         </div>
         <div className="top-spacer" />
         <div className="status-pill" id="apiStatus"><span className="status-dot" />API operational</div>
-        <div className="client-mode-group" id="clientModeGroup" aria-label="OAuth client type">
-          <button className="client-mode-option" type="button" data-oauth-client="confidential">
-            <span>OAuth</span>
-            <strong>Confidential</strong>
-          </button>
-          <button className="client-mode-option" type="button" data-oauth-client="public">
-            <span>OAuth</span>
-            <strong>Public PKCE</strong>
-          </button>
-        </div>
-        <button
-          className="prompt-toggle"
-          type="button"
-          id="forceConsentButton"
-          aria-pressed="false"
-          title="Add prompt=consent so OAuth always shows an authorize button before redirecting."
-        >
-          <MousePointerClick className="prompt-toggle-icon" aria-hidden="true" />
-          <span>prompt=consent</span>
-          <strong>Consent button</strong>
-        </button>
         <label className="session-control" htmlFor="sessionSelect">
           <span>Session</span>
           <select id="sessionSelect" disabled>
@@ -71,6 +50,12 @@ export default function App() {
           </div>
           <div className="avatar" id="profileAvatar" aria-hidden="true">IF</div>
         </div>
+        <label className="oauth-control" htmlFor="oauthModeSelect">
+          <span>OAuth</span>
+          <select id="oauthModeSelect" aria-label="OAuth flow">
+            <option>Loading OAuth options</option>
+          </select>
+        </label>
         <button className="auth-button" type="button" id="loginButton">Sign in</button>
         <button className="auth-button secondary" type="button" id="logoutButton" hidden>Sign out</button>
       </header>
