@@ -50,13 +50,16 @@ export default function App() {
           </div>
           <div className="avatar" id="profileAvatar" aria-hidden="true">IF</div>
         </div>
-        <label className="oauth-control" htmlFor="oauthModeSelect">
-          <span>OAuth</span>
-          <select id="oauthModeSelect" aria-label="OAuth flow">
-            <option>Loading OAuth options</option>
-          </select>
-        </label>
-        <button className="auth-button" type="button" id="loginButton">Sign in</button>
+        <div className="auth-split" id="authSplit">
+          <button className="auth-button" type="button" id="loginButton">Sign in</button>
+          <label className="auth-menu" htmlFor="oauthModeSelect" title="Choose OAuth flow">
+            <span className="sr-only">OAuth flow</span>
+            <select id="oauthModeSelect" aria-label="OAuth flow">
+              <option>Loading OAuth options</option>
+            </select>
+            <ChevronDown className="auth-menu-icon" aria-hidden="true" />
+          </label>
+        </div>
         <button className="auth-button secondary" type="button" id="logoutButton" hidden>Sign out</button>
       </header>
 

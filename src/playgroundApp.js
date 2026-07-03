@@ -35,6 +35,7 @@ function collectElements() {
   return {
     map: document.querySelector("#map"),
     apiStatus: document.querySelector("#apiStatus"),
+    authSplit: document.querySelector("#authSplit"),
     oauthModeSelect: document.querySelector("#oauthModeSelect"),
     loginButton: document.querySelector("#loginButton"),
     logoutButton: document.querySelector("#logoutButton"),
@@ -1121,6 +1122,7 @@ function renderAuthState() {
 
   const tokenSet = getStoredTokenSet();
   if (!tokenSet) {
+    els.authSplit.hidden = false;
     els.loginButton.hidden = false;
     els.logoutButton.hidden = true;
     els.profileName.textContent = "Signed out";
@@ -1134,6 +1136,7 @@ function renderAuthState() {
     return;
   }
 
+  els.authSplit.hidden = true;
   els.loginButton.hidden = true;
   els.logoutButton.hidden = false;
   const profile = getProfile(tokenSet);
