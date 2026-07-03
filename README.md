@@ -99,9 +99,21 @@ The same endpoint and variable controls are available, but each view gets the fu
 ## Data And Tokens
 
 - The playground uses OAuth, not PublicApi v2 API keys.
-- The OAuth client secret is never sent to your browser.
+- Confidential OAuth clients exchange tokens through the sample backend/Cloudflare Function, so the client secret is never sent to your browser.
+- Public OAuth clients exchange PKCE authorization codes directly from the browser and do not use a client secret.
 - Access and refresh tokens are stored in your browser local storage so the demo can refresh your session without cookies.
 - Use **Sign out** to remove stored tokens from the browser.
+
+## OAuth Client Modes
+
+The playground can show both supported OAuth client types side by side:
+
+- **Confidential**: the browser sends the authorization code to the sample backend, and the backend exchanges it with the client secret.
+- **Public PKCE**: the browser exchanges the PKCE authorization code directly with `https://api.infiniteflight.com/auth/v2/connect/token`; no client secret is used.
+
+Configure both `IF_CONFIDENTIAL_CLIENT_ID`/`IF_CONFIDENTIAL_CLIENT_SECRET` and `IF_PUBLIC_CLIENT_ID` to enable the side-by-side selector in the top bar. Selecting a different mode signs out the current token so requests always use the chosen client.
+
+The legacy single-client variables still work for quick local testing: set `IF_OAUTH_CLIENT_TYPE=confidential` or `IF_OAUTH_CLIENT_TYPE=public` with `IF_CLIENT_ID`, and include `IF_CLIENT_SECRET` only for confidential clients.
 
 ## For Developers
 
@@ -114,7 +126,7 @@ npm install
 npm run dev
 ```
 
-Local OAuth settings are intended for Infinite Flight maintainers and are documented in the example environment files. Do not commit local `.env` or `.dev.vars` files.
+Local OAuth settings are intended for Infinite Flight maintainers and are documented in the example environment files. Configure both sample clients to compare confidential and public PKCE flows side by side. Do not commit local `.env` or `.dev.vars` files.
 
 Useful commands:
 

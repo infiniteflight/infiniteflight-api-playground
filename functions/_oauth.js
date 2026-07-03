@@ -11,24 +11,35 @@ const KNOWN_SCOPES = [
 
 export function publicConfig(env, request) {
   const appBaseUrl = trimTrailingSlash(env.APP_BASE_URL || new URL(request.url).origin);
+  const clients = getOAuthClients(env, appBaseUrl);
+  const activeClient = selectOAuthClient(clients, env.IF_OAUTH_CLIENT_TYPE);
+
   return {
-    configured: Boolean(env.IF_CLIENT_ID && env.IF_CLIENT_SECRET),
+    configured: Boolean(activeClient?.configured),
+    hasConfiguredClients: clients.some(client => client.configured),
     authBaseUrl: trimTrailingSlash(env.IF_AUTH_BASE || "https://api.infiniteflight.com/auth"),
     publicApiBaseUrl: normalizePublicApiBaseUrl(env.IF_PUBLIC_API_BASE || "https://api.infiniteflight.com/public"),
     scopes: normalizeScopes(env.IF_SCOPES || DEFAULT_SCOPES),
-    clientId: env.IF_CLIENT_ID || "",
-    redirectUri: env.IF_REDIRECT_URI || `${appBaseUrl}/`
+    ...toPublicClientConfig(activeClient),
+    clients: clients.map(toPublicClientConfig)
   };
 }
 
-export async function tokenRequest(env, body) {
-  const configError = oauthConfigError(env);
+export async function tokenRequest(env, body, clientKey) {
+  const client = selectOAuthClient(getOAuthClients(env), clientKey);
+  const configError = oauthConfigError(client);
   if (configError) {
     return configError;
   }
 
+  if (client.clientType === "public") {
+    return json({
+      error: "Public clients exchange tokens directly with the OAuth token endpoint."
+    }, 400);
+  }
+
   const authBaseUrl = trimTrailingSlash(env.IF_AUTH_BASE || "https://api.infiniteflight.com/auth");
-  const credentials = btoa(`${env.IF_CLIENT_ID}:${env.IF_CLIENT_SECRET}`);
+  const credentials = btoa(`${client.clientId}:${client.clientSecret}`);
   const response = await fetch(`${authBaseUrl}/v2/connect/token`, {
     method: "POST",
     headers: {
@@ -62,8 +73,11 @@ export async function readJson(request) {
   }
 }
 
-export function redirectUri(env, request) {
-  return publicConfig(env, request).redirectUri;
+export function redirectUri(env, request, clientKey) {
+  const appBaseUrl = request?.url
+    ? trimTrailingSlash(env.APP_BASE_URL || new URL(request.url).origin)
+    : trimTrailingSlash(env.APP_BASE_URL || "");
+  return selectOAuthClient(getOAuthClients(env, appBaseUrl), clientKey).redirectUri;
 }
 
 export function json(value, status = 200) {
@@ -75,10 +89,8 @@ export function json(value, status = 200) {
   });
 }
 
-function oauthConfigError(env) {
-  const missing = [];
-  if (!env.IF_CLIENT_ID) missing.push("IF_CLIENT_ID");
-  if (!env.IF_CLIENT_SECRET) missing.push("IF_CLIENT_SECRET");
+function oauthConfigError(client) {
+  const missing = missingOAuthConfig(client);
 
   if (missing.length > 0) {
     return json({
@@ -87,6 +99,73 @@ function oauthConfigError(env) {
   }
 
   return null;
+}
+
+function missingOAuthConfig(client) {
+  const missing = [];
+  if (!client?.clientId) missing.push(client?.clientType === "public" ? "IF_PUBLIC_CLIENT_ID" : "IF_CONFIDENTIAL_CLIENT_ID");
+  if (client?.clientType === "confidential" && !client.clientSecret) missing.push("IF_CONFIDENTIAL_CLIENT_SECRET");
+  return missing;
+}
+
+function normalizeOAuthClientType(value) {
+  return String(value || "").trim().toLowerCase() === "public" ? "public" : "confidential";
+}
+
+function getOAuthClients(env, appBaseUrl = "") {
+  const legacyClientType = normalizeOAuthClientType(env.IF_OAUTH_CLIENT_TYPE);
+  const legacyIsConfidential = legacyClientType === "confidential";
+  const legacyIsPublic = legacyClientType === "public";
+  const fallbackRedirectUri = appBaseUrl ? `${appBaseUrl}/` : "";
+  const authBaseUrl = trimTrailingSlash(env.IF_AUTH_BASE || "https://api.infiniteflight.com/auth");
+  const publicApiBaseUrl = normalizePublicApiBaseUrl(env.IF_PUBLIC_API_BASE || "https://api.infiniteflight.com/public");
+
+  const confidentialClientId = env.IF_CONFIDENTIAL_CLIENT_ID || (legacyIsConfidential ? env.IF_CLIENT_ID : "");
+  const confidentialClientSecret = env.IF_CONFIDENTIAL_CLIENT_SECRET || (legacyIsConfidential ? env.IF_CLIENT_SECRET : "");
+  const publicClientId = env.IF_PUBLIC_CLIENT_ID || (legacyIsPublic ? env.IF_CLIENT_ID : "");
+
+  return [
+    {
+      key: "confidential",
+      clientType: "confidential",
+      label: "Confidential",
+      tokenExchange: "backend",
+      configured: Boolean(confidentialClientId && confidentialClientSecret),
+      clientId: confidentialClientId || "",
+      clientSecret: confidentialClientSecret || "",
+      redirectUri: env.IF_CONFIDENTIAL_REDIRECT_URI || (legacyIsConfidential ? env.IF_REDIRECT_URI : "") || fallbackRedirectUri,
+      scopes: normalizeScopes(env.IF_CONFIDENTIAL_SCOPES || (legacyIsConfidential ? env.IF_SCOPES : "") || env.IF_SCOPES || DEFAULT_SCOPES),
+      authBaseUrl,
+      publicApiBaseUrl
+    },
+    {
+      key: "public",
+      clientType: "public",
+      label: "Public PKCE",
+      tokenExchange: "browser",
+      configured: Boolean(publicClientId),
+      clientId: publicClientId || "",
+      clientSecret: "",
+      redirectUri: env.IF_PUBLIC_REDIRECT_URI || (legacyIsPublic ? env.IF_REDIRECT_URI : "") || fallbackRedirectUri,
+      scopes: normalizeScopes(env.IF_PUBLIC_SCOPES || (legacyIsPublic ? env.IF_SCOPES : "") || env.IF_SCOPES || DEFAULT_SCOPES),
+      authBaseUrl,
+      publicApiBaseUrl
+    }
+  ];
+}
+
+function selectOAuthClient(clients, key) {
+  const requestedClient = clients.find(client => client.key === key)
+    || clients.find(client => client.clientType === normalizeOAuthClientType(key));
+  return requestedClient?.configured
+    ? requestedClient
+    : clients.find(client => client.configured)
+    || clients[0];
+}
+
+function toPublicClientConfig(client) {
+  const { clientSecret, ...publicClient } = client;
+  return publicClient;
 }
 
 function trimTrailingSlash(value) {

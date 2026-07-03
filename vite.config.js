@@ -54,12 +54,13 @@ function localOAuthApi(env, port) {
               return sendJson(res, 400, { error: "Missing authorization code or PKCE verifier." });
             }
 
+            const clientKey = body.clientKey || "confidential";
             return proxyTokenRequest(res, env, new URLSearchParams({
               grant_type: "authorization_code",
               code: body.code,
-              redirect_uri: publicConfig(env, port).redirectUri,
+              redirect_uri: selectOAuthClient(getOAuthClients(env, appBaseUrl(port, env)), clientKey).redirectUri,
               code_verifier: body.codeVerifier
-            }));
+            }), clientKey);
           }
 
           if (req.method === "POST" && url.pathname === "/api/oauth/refresh") {
@@ -71,7 +72,7 @@ function localOAuthApi(env, port) {
             return proxyTokenRequest(res, env, new URLSearchParams({
               grant_type: "refresh_token",
               refresh_token: body.refreshToken
-            }));
+            }), body.clientKey || "confidential");
           }
         } catch (error) {
           return sendJson(res, error.statusCode || 500, {
@@ -85,11 +86,18 @@ function localOAuthApi(env, port) {
   };
 }
 
-async function proxyTokenRequest(res, env, body) {
-  const missing = missingOAuthConfig(env);
+async function proxyTokenRequest(res, env, body, clientKey) {
+  const client = selectOAuthClient(getOAuthClients(env), clientKey);
+  const missing = missingOAuthConfig(client);
   if (missing.length > 0) {
     return sendJson(res, 500, {
       error: `Missing required environment variables: ${missing.join(", ")}`
+    });
+  }
+
+  if (client.clientType === "public") {
+    return sendJson(res, 400, {
+      error: "Public clients exchange tokens directly with the OAuth token endpoint."
     });
   }
 
@@ -97,7 +105,7 @@ async function proxyTokenRequest(res, env, body) {
   const response = await fetch(`${authBaseUrl}/v2/connect/token`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${env.IF_CLIENT_ID}:${env.IF_CLIENT_SECRET}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`${client.clientId}:${client.clientSecret}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json"
     },
@@ -111,22 +119,89 @@ async function proxyTokenRequest(res, env, body) {
 }
 
 function publicConfig(env, port) {
-  const appBaseUrl = trimTrailingSlash(env.APP_BASE_URL || `http://localhost:${port}`);
+  const appRoot = appBaseUrl(port, env);
+  const clients = getOAuthClients(env, appRoot);
+  const activeClient = selectOAuthClient(clients, env.IF_OAUTH_CLIENT_TYPE);
   return {
-    configured: missingOAuthConfig(env).length === 0,
+    configured: Boolean(activeClient?.configured),
+    hasConfiguredClients: clients.some(client => client.configured),
     authBaseUrl: trimTrailingSlash(env.IF_AUTH_BASE || "http://localhost:5068"),
     publicApiBaseUrl: normalizePublicApiBaseUrl(env.IF_PUBLIC_API_BASE || "https://api.infiniteflight.com/public"),
     scopes: normalizeScopes(env.IF_SCOPES || DEFAULT_SCOPES),
-    clientId: env.IF_CLIENT_ID || "",
-    redirectUri: env.IF_REDIRECT_URI || `${appBaseUrl}/`
+    ...toPublicClientConfig(activeClient),
+    clients: clients.map(toPublicClientConfig)
   };
 }
 
-function missingOAuthConfig(env) {
+function missingOAuthConfig(client) {
   const missing = [];
-  if (!env.IF_CLIENT_ID) missing.push("IF_CLIENT_ID");
-  if (!env.IF_CLIENT_SECRET) missing.push("IF_CLIENT_SECRET");
+  if (!client?.clientId) missing.push(client?.clientType === "public" ? "IF_PUBLIC_CLIENT_ID" : "IF_CONFIDENTIAL_CLIENT_ID");
+  if (client?.clientType === "confidential" && !client.clientSecret) missing.push("IF_CONFIDENTIAL_CLIENT_SECRET");
   return missing;
+}
+
+function normalizeOAuthClientType(value) {
+  return String(value || "").trim().toLowerCase() === "public" ? "public" : "confidential";
+}
+
+function appBaseUrl(port, env) {
+  return trimTrailingSlash(env.APP_BASE_URL || `http://localhost:${port}`);
+}
+
+function getOAuthClients(env, appRoot = "") {
+  const legacyClientType = normalizeOAuthClientType(env.IF_OAUTH_CLIENT_TYPE);
+  const legacyIsConfidential = legacyClientType === "confidential";
+  const legacyIsPublic = legacyClientType === "public";
+  const fallbackRedirectUri = appRoot ? `${appRoot}/` : "";
+  const authBaseUrl = trimTrailingSlash(env.IF_AUTH_BASE || "http://localhost:5068");
+  const publicApiBaseUrl = normalizePublicApiBaseUrl(env.IF_PUBLIC_API_BASE || "https://api.infiniteflight.com/public");
+
+  const confidentialClientId = env.IF_CONFIDENTIAL_CLIENT_ID || (legacyIsConfidential ? env.IF_CLIENT_ID : "");
+  const confidentialClientSecret = env.IF_CONFIDENTIAL_CLIENT_SECRET || (legacyIsConfidential ? env.IF_CLIENT_SECRET : "");
+  const publicClientId = env.IF_PUBLIC_CLIENT_ID || (legacyIsPublic ? env.IF_CLIENT_ID : "");
+
+  return [
+    {
+      key: "confidential",
+      clientType: "confidential",
+      label: "Confidential",
+      tokenExchange: "backend",
+      configured: Boolean(confidentialClientId && confidentialClientSecret),
+      clientId: confidentialClientId || "",
+      clientSecret: confidentialClientSecret || "",
+      redirectUri: env.IF_CONFIDENTIAL_REDIRECT_URI || (legacyIsConfidential ? env.IF_REDIRECT_URI : "") || fallbackRedirectUri,
+      scopes: normalizeScopes(env.IF_CONFIDENTIAL_SCOPES || (legacyIsConfidential ? env.IF_SCOPES : "") || env.IF_SCOPES || DEFAULT_SCOPES),
+      authBaseUrl,
+      publicApiBaseUrl
+    },
+    {
+      key: "public",
+      clientType: "public",
+      label: "Public PKCE",
+      tokenExchange: "browser",
+      configured: Boolean(publicClientId),
+      clientId: publicClientId || "",
+      clientSecret: "",
+      redirectUri: env.IF_PUBLIC_REDIRECT_URI || (legacyIsPublic ? env.IF_REDIRECT_URI : "") || fallbackRedirectUri,
+      scopes: normalizeScopes(env.IF_PUBLIC_SCOPES || (legacyIsPublic ? env.IF_SCOPES : "") || env.IF_SCOPES || DEFAULT_SCOPES),
+      authBaseUrl,
+      publicApiBaseUrl
+    }
+  ];
+}
+
+function selectOAuthClient(clients, key) {
+  const requestedClient = clients.find(client => client.key === key)
+    || clients.find(client => client.clientType === normalizeOAuthClientType(key));
+  return requestedClient?.configured
+    ? requestedClient
+    : clients.find(client => client.configured)
+    || clients[0];
+}
+
+function toPublicClientConfig(client) {
+  const { clientSecret, ...publicClient } = client;
+  return publicClient;
 }
 
 function readJsonBody(req) {

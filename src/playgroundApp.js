@@ -1,5 +1,6 @@
 const TOKEN_STORAGE_KEY = "if.sample.flightTracker.tokens";
 const OAUTH_STORAGE_KEY = "if.sample.flightTracker.oauth";
+const OAUTH_CLIENT_STORAGE_KEY = "if.sample.flightTracker.oauthClient";
 const LAYOUT_STORAGE_KEY = "if.sample.flightTracker.layout";
 const SELECTED_SESSION_STORAGE_KEY = "if.sample.flightTracker.selectedSessionId";
 const KNOWN_OAUTH_SCOPES = [
@@ -33,6 +34,8 @@ function collectElements() {
   return {
     map: document.querySelector("#map"),
     apiStatus: document.querySelector("#apiStatus"),
+    clientModeGroup: document.querySelector("#clientModeGroup"),
+    clientModeButtons: Array.from(document.querySelectorAll("[data-oauth-client]")),
     loginButton: document.querySelector("#loginButton"),
     logoutButton: document.querySelector("#logoutButton"),
     profileName: document.querySelector("#profileName"),
@@ -422,6 +425,7 @@ export async function bootPlayground() {
 
   els = collectElements();
   await loadRuntimeConfig();
+  renderRuntimeConfig();
   applyMobilePane();
   applyLayout();
   setupMap();
@@ -445,7 +449,7 @@ export async function bootPlayground() {
 
 async function loadRuntimeConfig() {
   if (window.IF_SAMPLE_CONFIG) {
-    config = window.IF_SAMPLE_CONFIG;
+    config = normalizeRuntimeConfig(window.IF_SAMPLE_CONFIG);
     return;
   }
 
@@ -456,10 +460,117 @@ async function loadRuntimeConfig() {
       }
     });
 
-    config = response.ok ? await response.json() : { configured: false };
+    config = normalizeRuntimeConfig(response.ok ? await response.json() : { configured: false });
   } catch {
-    config = { configured: false };
+    config = normalizeRuntimeConfig({ configured: false });
   }
+}
+
+function renderRuntimeConfig() {
+  if (!els.clientModeButtons.length) {
+    return;
+  }
+
+  const clients = getOAuthClients();
+  els.clientModeButtons.forEach(button => {
+    const client = clients.find(item => item.key === button.dataset.oauthClient);
+    const isSelected = client?.key === config.clientKey;
+    const isConfigured = Boolean(client?.configured);
+    button.classList.toggle("active", isSelected);
+    button.classList.toggle("missing", !isConfigured);
+    button.disabled = !isConfigured;
+    button.setAttribute("aria-pressed", String(isSelected));
+    button.title = clientModeTitle(client);
+  });
+}
+
+function normalizeRuntimeConfig(rawConfig) {
+  const clients = Array.isArray(rawConfig?.clients) && rawConfig.clients.length
+    ? rawConfig.clients.map(normalizeOAuthClientConfig)
+    : [normalizeOAuthClientConfig(rawConfig)];
+  const selectedKey = localStorage.getItem(OAUTH_CLIENT_STORAGE_KEY);
+  const activeClient = pickOAuthClient(clients, selectedKey || rawConfig?.clientKey || rawConfig?.clientType);
+
+  if (activeClient?.key) {
+    localStorage.setItem(OAUTH_CLIENT_STORAGE_KEY, activeClient.key);
+  }
+
+  return {
+    ...rawConfig,
+    ...(activeClient || {}),
+    configured: Boolean(activeClient?.configured),
+    hasConfiguredClients: clients.some(client => client.configured),
+    clients
+  };
+}
+
+function normalizeOAuthClientConfig(client) {
+  const clientType = normalizeOAuthClientType(client?.clientType);
+  const key = client?.key || clientType;
+
+  return {
+    key,
+    clientType,
+    label: client?.label || (clientType === "public" ? "Public PKCE" : "Confidential"),
+    tokenExchange: client?.tokenExchange || (clientType === "public" ? "browser" : "backend"),
+    configured: Boolean(client?.configured && client?.clientId),
+    clientId: client?.clientId || "",
+    redirectUri: client?.redirectUri || "",
+    scopes: normalizeScopes(client?.scopes || ""),
+    authBaseUrl: trimTrailingSlash(client?.authBaseUrl || config.authBaseUrl || ""),
+    publicApiBaseUrl: normalizePublicApiBaseUrl(client?.publicApiBaseUrl || config.publicApiBaseUrl || "")
+  };
+}
+
+function selectOAuthClient(clientKey, options = {}) {
+  const selectedClient = pickOAuthClient(getOAuthClients(), clientKey);
+  if (!selectedClient || selectedClient.key === config.clientKey) {
+    return;
+  }
+
+  config = {
+    ...config,
+    ...selectedClient,
+    configured: Boolean(selectedClient.configured)
+  };
+  localStorage.setItem(OAUTH_CLIENT_STORAGE_KEY, selectedClient.key);
+
+  if (!options.keepToken) {
+    localStorage.removeItem(OAUTH_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    resetDataState();
+    renderAuthState();
+    renderCatalog();
+    renderNetworkLog();
+    renderInspector();
+  }
+
+  renderRuntimeConfig();
+}
+
+function getOAuthClients() {
+  return Array.isArray(config.clients) ? config.clients : [];
+}
+
+function pickOAuthClient(clients, key) {
+  const requestedClient = clients.find(client => client.key === key)
+    || clients.find(client => client.clientType === normalizeOAuthClientType(key));
+  return requestedClient?.configured
+    ? requestedClient
+    : clients.find(client => client.configured)
+    || requestedClient
+    || clients[0]
+    || null;
+}
+
+function clientModeTitle(client) {
+  if (!client?.configured) {
+    return `${client?.label || "OAuth client"} is not configured in the sample environment.`;
+  }
+
+  return client.clientType === "public"
+    ? "Public OAuth client: the browser exchanges PKCE codes directly with the token endpoint."
+    : "Confidential OAuth client: the sample backend exchanges PKCE codes with a client secret.";
 }
 
 function setupMap() {
@@ -495,6 +606,9 @@ function setupMap() {
 function setupEvents() {
   els.loginButton.addEventListener("click", () => void startLogin());
   els.logoutButton.addEventListener("click", logout);
+  els.clientModeButtons.forEach(button => {
+    button.addEventListener("click", () => selectOAuthClient(button.dataset.oauthClient));
+  });
   els.authErrorCloseButton.addEventListener("click", hideAuthError);
   els.authErrorDismissButton.addEventListener("click", hideAuthError);
   els.authErrorRetryButton.addEventListener("click", () => void startLogin());
@@ -822,6 +936,7 @@ async function startLogin() {
   localStorage.setItem(OAUTH_STORAGE_KEY, JSON.stringify({
     state: stateToken,
     codeVerifier,
+    clientKey: config.clientKey,
     createdAt: Date.now()
   }));
 
@@ -871,16 +986,26 @@ async function completeOAuthCallbackIfNeeded() {
     throw createAppError("oauth_state", "Sign in failed: invalid OAuth state.");
   }
 
+  selectOAuthClient(oauthState.clientKey, { keepToken: true });
   setApiStatus("Completing sign in...", "warn");
   let tokenSet;
   try {
-    tokenSet = await requestJson("/api/oauth/token", {
-      method: "POST",
-      body: JSON.stringify({
+    tokenSet = isPublicOAuthClient(config)
+      ? await requestDirectOAuthToken(new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: config.clientId,
         code,
-        codeVerifier: oauthState.codeVerifier
-      })
-    });
+        redirect_uri: config.redirectUri,
+        code_verifier: oauthState.codeVerifier
+      }))
+      : await requestJson("/api/oauth/token", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          codeVerifier: oauthState.codeVerifier,
+          clientKey: config.clientKey
+        })
+      });
   } catch (error) {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     history.replaceState(null, "", "/");
@@ -1783,12 +1908,7 @@ async function getAccessToken() {
 async function refreshAccessToken(tokenSet) {
   if (!refreshRequest) {
     setApiStatus("Refreshing token...", "warn");
-    refreshRequest = requestJson("/api/oauth/refresh", {
-      method: "POST",
-      body: JSON.stringify({
-        refreshToken: tokenSet.refresh_token
-      })
-    }).then(tokens => {
+    refreshRequest = requestRefreshToken(tokenSet.refresh_token, tokenSet).then(tokens => {
       const refreshed = saveTokenSet(tokens, tokenSet);
       renderAuthState();
       return refreshed.access_token;
@@ -1807,6 +1927,43 @@ async function refreshAccessToken(tokenSet) {
   return refreshRequest;
 }
 
+function requestRefreshToken(refreshToken, tokenSet = null) {
+  const client = pickOAuthClient(getOAuthClients(), tokenSet?.clientKey || config.clientKey) || config;
+  if (isPublicOAuthClient(client)) {
+    return requestDirectOAuthToken(new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: client.clientId,
+      refresh_token: refreshToken
+    }), client);
+  }
+
+  return requestJson("/api/oauth/refresh", {
+    method: "POST",
+    body: JSON.stringify({
+      refreshToken,
+      clientKey: client.clientKey || client.key
+    })
+  });
+}
+
+async function requestDirectOAuthToken(body, client = config) {
+  const response = await fetch(`${trimTrailingSlash(client.authBaseUrl)}/v2/connect/token`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(payload, response.status));
+  }
+
+  return payload;
+}
+
 function saveTokenSet(tokens, previousTokens = null) {
   if (!tokens?.access_token) {
     throw createAppError("token_missing", "The token response did not include an access token.");
@@ -1816,6 +1973,9 @@ function saveTokenSet(tokens, previousTokens = null) {
   const tokenSet = {
     ...previousTokens,
     ...tokens,
+    clientKey: previousTokens?.clientKey || config.clientKey,
+    clientType: previousTokens?.clientType || config.clientType,
+    clientId: previousTokens?.clientId || config.clientId,
     refresh_token: tokens.refresh_token || previousTokens?.refresh_token || null,
     expiresAt,
     claims: {
@@ -3243,6 +3403,14 @@ function normalizeScopes(value) {
   }
 
   return scopes.join(" ");
+}
+
+function isPublicOAuthClient(client = config) {
+  return normalizeOAuthClientType(client?.clientType) === "public";
+}
+
+function normalizeOAuthClientType(value) {
+  return String(value || "").trim().toLowerCase() === "public" ? "public" : "confidential";
 }
 
 function splitKnownScopes(value) {

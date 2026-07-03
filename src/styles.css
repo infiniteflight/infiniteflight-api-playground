@@ -194,6 +194,68 @@ input {
   box-shadow: 0 0 8px var(--err);
 }
 
+.client-mode-group {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.client-mode-option {
+  display: inline-grid;
+  min-width: 112px;
+  place-items: center;
+  gap: 1px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.client-mode-option span {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.client-mode-option strong {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.client-mode-option:hover:not(:disabled) {
+  border-color: rgba(255, 145, 66, 0.28);
+  background: rgba(255, 145, 66, 0.06);
+  color: var(--txt);
+}
+
+.client-mode-option.active {
+  border-color: rgba(255, 145, 66, 0.42);
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.client-mode-option[data-oauth-client="public"].active {
+  border-color: rgba(93, 184, 255, 0.35);
+  background: rgba(93, 184, 255, 0.1);
+  color: var(--get);
+}
+
+.client-mode-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.44;
+}
+
 .session-control {
   display: flex;
   align-items: center;
@@ -1993,6 +2055,19 @@ body.hide-bottom .drawer {
     text-overflow: ellipsis;
   }
 
+  .client-mode-group {
+    padding: 2px;
+  }
+
+  .client-mode-option {
+    min-width: 90px;
+    padding: 0 6px;
+  }
+
+  .client-mode-option span {
+    display: none;
+  }
+
   .session-control {
     flex-basis: 248px;
     min-width: 180px;
@@ -2063,7 +2138,7 @@ body.hide-bottom .drawer {
 
   .github-link {
     grid-column: 1 / -1;
-    grid-row: 5;
+    grid-row: 6;
     justify-self: stretch;
     width: 100%;
     min-height: 36px;
@@ -2120,9 +2195,26 @@ body.hide-bottom .drawer {
     width: 100%;
   }
 
-  .session-control {
+  .client-mode-group {
     grid-column: 1 / -1;
     grid-row: 4;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .client-mode-option {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 34px;
+  }
+
+  .client-mode-option span {
+    display: block;
+  }
+
+  .session-control {
+    grid-column: 1 / -1;
+    grid-row: 5;
     min-width: 0;
     min-height: 42px;
     width: 100%;

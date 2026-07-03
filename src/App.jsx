@@ -12,6 +12,16 @@ export default function App() {
         </div>
         <div className="top-spacer" />
         <div className="status-pill" id="apiStatus"><span className="status-dot" />API operational</div>
+        <div className="client-mode-group" id="clientModeGroup" aria-label="OAuth client type">
+          <button className="client-mode-option" type="button" data-oauth-client="confidential">
+            <span>OAuth</span>
+            <strong>Confidential</strong>
+          </button>
+          <button className="client-mode-option" type="button" data-oauth-client="public">
+            <span>OAuth</span>
+            <strong>Public PKCE</strong>
+          </button>
+        </div>
         <label className="session-control" htmlFor="sessionSelect">
           <span>Session</span>
           <select id="sessionSelect" disabled>

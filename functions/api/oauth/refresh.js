@@ -16,5 +16,5 @@ export async function onRequestPost({ env, request }) {
     refresh_token: requestBody.refreshToken
   });
 
-  return tokenRequest(env, body);
+  return tokenRequest(env, body, requestBody.clientKey || "confidential");
 }
