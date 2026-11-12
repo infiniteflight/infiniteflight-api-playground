@@ -1,3 +1,5 @@
+import { createMapView } from "./mapView.js";
+
 const TOKEN_STORAGE_KEY = "if.sample.flightTracker.tokens";
 const OAUTH_STORAGE_KEY = "if.sample.flightTracker.oauth";
 const OAUTH_CLIENT_STORAGE_KEY = "if.sample.flightTracker.oauthClient";
@@ -27,7 +29,6 @@ const GEODESIC_MAX_STEP_DEGREES = 1.5;
 const GEODESIC_MAX_STEPS_PER_SEGMENT = 180;
 
 let config = window.IF_SAMPLE_CONFIG || {};
-const L = window.L;
 
 let els = null;
 
@@ -128,8 +129,7 @@ const state = {
   layout: loadLayout()
 };
 
-let map = null;
-let layers = null;
+let mapView = null;
 let refreshRequest = null;
 let requestSequence = 0;
 let tokenTimer = null;
@@ -241,187 +241,8 @@ function endpoint(method, label, path, options = {}) {
   return { method, label, path, ...options };
 }
 
-const AircraftCanvasLayer = L.Layer.extend({
-  options: {
-    clickTolerance: 12,
-    normalColor: "#ff9142",
-    selectedColor: "#ffffff"
-  },
-
-  initialize(options = {}) {
-    L.setOptions(this, options);
-    this._flights = [];
-    this._selectedFlightId = null;
-    this._drawFrame = null;
-    this._size = L.point(0, 0);
-  },
-
-  onAdd(activeMap) {
-    this._map = activeMap;
-    this._canvas = L.DomUtil.create("canvas", "aircraft-canvas-layer");
-    this._context = this._canvas.getContext("2d", { alpha: true });
-    activeMap.getContainer().appendChild(this._canvas);
-    activeMap.on("move zoom resize viewreset", this._reset, this);
-    activeMap.on("click", this._handleMapClick, this);
-    this._reset();
-  },
-
-  onRemove(activeMap) {
-    if (this._drawFrame) {
-      cancelAnimationFrame(this._drawFrame);
-      this._drawFrame = null;
-    }
-
-    activeMap.off("move zoom resize viewreset", this._reset, this);
-    activeMap.off("click", this._handleMapClick, this);
-    this._canvas?.remove();
-    this._canvas = null;
-    this._context = null;
-    this._map = null;
-  },
-
-  setFlights(flights, selectedFlightId) {
-    this._flights = Array.isArray(flights) ? flights : [];
-    this._selectedFlightId = selectedFlightId || null;
-    this._requestDraw();
-  },
-
-  setSelectedFlightId(selectedFlightId) {
-    this._selectedFlightId = selectedFlightId || null;
-    this._requestDraw();
-  },
-
-  clearLayers() {
-    this.setFlights([], null);
-  },
-
-  _reset() {
-    if (!this._map || !this._canvas) {
-      return;
-    }
-
-    const size = this._map.getSize();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = Math.max(1, Math.round(size.x * dpr));
-    const height = Math.max(1, Math.round(size.y * dpr));
-
-    this._size = size;
-    this._dpr = dpr;
-    if (this._canvas.width !== width || this._canvas.height !== height) {
-      this._canvas.width = width;
-      this._canvas.height = height;
-      this._canvas.style.width = `${size.x}px`;
-      this._canvas.style.height = `${size.y}px`;
-    }
-
-    this._requestDraw();
-  },
-
-  _requestDraw() {
-    if (!this._map || !this._context || this._drawFrame) {
-      return;
-    }
-
-    this._drawFrame = requestAnimationFrame(() => {
-      this._drawFrame = null;
-      this._draw();
-    });
-  },
-
-  _draw() {
-    if (!this._map || !this._context) {
-      return;
-    }
-
-    const context = this._context;
-    const dpr = this._dpr || 1;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, this._size.x, this._size.y);
-
-    const bounds = this._map.getBounds().pad(0.08);
-    let selected = null;
-
-    for (const flight of this._flights) {
-      const point = getLatLng(flight);
-      if (!point || !bounds.contains(point)) {
-        continue;
-      }
-
-      const flightIdValue = getFlightId(flight);
-      const layerPoint = this._map.latLngToContainerPoint(point);
-      if (flightIdValue && flightIdValue === this._selectedFlightId) {
-        selected = { flight, layerPoint };
-        continue;
-      }
-
-      this._drawAircraft(layerPoint, getHeading(flight), false);
-    }
-
-    if (selected) {
-      this._drawAircraft(selected.layerPoint, getHeading(selected.flight), true);
-    }
-  },
-
-  _drawAircraft(point, heading, selected) {
-    const context = this._context;
-    context.save();
-    context.translate(point.x, point.y);
-    context.rotate((heading * Math.PI) / 180);
-    context.beginPath();
-    context.moveTo(0, -8);
-    context.lineTo(6, 7);
-    context.lineTo(0, 4);
-    context.lineTo(-6, 7);
-    context.closePath();
-    context.fillStyle = selected ? this.options.selectedColor : this.options.normalColor;
-
-    if (selected) {
-      context.shadowColor = "rgba(255, 255, 255, 0.75)";
-      context.shadowBlur = 9;
-    }
-
-    context.fill();
-    context.restore();
-  },
-
-  _handleMapClick(event) {
-    const flight = this._nearestFlight(event.latlng);
-    if (flight && this.options.onFlightClick) {
-      this.options.onFlightClick(flight);
-    }
-  },
-
-  _nearestFlight(latLng) {
-    if (!this._map || this._flights.length === 0) {
-      return null;
-    }
-
-    const clickPoint = this._map.latLngToContainerPoint(latLng);
-    const tolerance = this.options.clickTolerance;
-    let bestFlight = null;
-    let bestDistance = tolerance * tolerance;
-
-    for (const flight of this._flights) {
-      const point = getLatLng(flight);
-      if (!point) {
-        continue;
-      }
-
-      const layerPoint = this._map.latLngToContainerPoint(point);
-      const distance = clickPoint.distanceTo(layerPoint);
-      const squaredDistance = distance * distance;
-      if (squaredDistance <= bestDistance) {
-        bestDistance = squaredDistance;
-        bestFlight = flight;
-      }
-    }
-
-    return bestFlight;
-  }
-});
-
 export async function bootPlayground() {
-  if (map) {
+  if (mapView) {
     return;
   }
 
@@ -627,34 +448,18 @@ function clientModeTitle(client) {
     : "Confidential OAuth client: the sample backend exchanges PKCE codes with a client secret.";
 }
 
+// Zoom levels: MapLibre uses 512 px tiles, so MapLibre zoom N shows the same
+// scale as zoom N + 1 on a 256 px raster map such as Leaflet. The zoom values
+// in this file are one less than the old Leaflet values for the same view.
 function setupMap() {
-  map = L.map(els.map, {
-    attributionControl: true,
-    minZoom: 2,
-    preferCanvas: true,
-    worldCopyJump: true,
-    zoomControl: false
-  }).setView([35, 5], 3);
-
-  L.control.zoom({ position: "bottomright" }).addTo(map);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-    maxZoom: 12,
-    subdomains: "abcd"
-  }).addTo(map);
-
-  layers = {
-    flights: new AircraftCanvasLayer({
-      onFlightClick: flight => {
-        void selectFlight(flight);
-      }
-    }).addTo(map),
-    route: L.layerGroup().addTo(map),
-    geo: L.layerGroup().addTo(map),
-    airports: L.layerGroup().addTo(map),
-    atc: L.layerGroup().addTo(map),
-    tracks: L.layerGroup().addTo(map)
-  };
+  mapView = createMapView(els.map, {
+    getLatLng,
+    getFlightId,
+    getHeading,
+    onFlightClick: flight => {
+      void selectFlight(flight);
+    }
+  });
 }
 
 function setupEvents() {
@@ -1229,7 +1034,7 @@ async function loadFlights(id) {
     return null;
   }
 
-  layers.geo.clearLayers();
+  mapView.clear("geo");
   const payload = await requestV3Json(`/v3/sessions/${id}/flights`, {
     label: "GET /v3/sessions/{sessionId}/flights"
   });
@@ -1719,7 +1524,7 @@ function selectFlightVariableById(id) {
   state.selectedFlight = selected;
   state.selectedUserId = getField(selected, "userId", "UserId") || state.selectedUserId;
   state.selectedEntity = { type: "Flight", value: selected };
-  layers.flights.setSelectedFlightId(getFlightId(selected));
+  mapView.setSelectedFlightId(getFlightId(selected));
   renderCatalog();
   activateInspectorTab("selected");
 }
@@ -2484,11 +2289,8 @@ function renderFlightsOnMap(flights) {
     bounds.push(point);
   }
 
-  layers.flights.setFlights(flights, selectedFlightId);
-
-  if (bounds.length > 0) {
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 6 });
-  }
+  mapView.setFlights(flights, selectedFlightId);
+  mapView.fitPoints(bounds, { padding: 48, maxZoom: 5 });
 }
 
 async function selectFlight(flight) {
@@ -2496,14 +2298,14 @@ async function selectFlight(flight) {
   state.selectedUserId = getField(flight, "userId", "UserId") || state.selectedUserId;
   state.selectedEntity = { type: "Selected Aircraft", value: flight };
   state.selectedRequestId = null;
-  layers.flights.setSelectedFlightId(getFlightId(flight));
+  mapView.setSelectedFlightId(getFlightId(flight));
   renderCatalog();
   activateInspectorTab("selected");
   focusMobilePane("inspect");
 
   const point = getLatLng(flight);
   if (point) {
-    map.flyTo(point, Math.max(map.getZoom(), 6), { duration: 0.35 });
+    mapView.flyTo(point, Math.max(mapView.getZoom(), 5), 0.35);
   }
 
   await loadSelectedFlightApis(flight);
@@ -2538,7 +2340,7 @@ async function loadSelectedFlightApis(flight) {
 }
 
 function renderRouteOnMap(points) {
-  layers.route.clearLayers();
+  mapView.clear("route");
   const latLngs = points.map(getLatLng).filter(Boolean);
   if (latLngs.length < 2) {
     return;
@@ -2549,97 +2351,96 @@ function renderRouteOnMap(points) {
     return;
   }
 
-  L.polyline(routePath, {
+  mapView.setLine("route", routePath, {
     color: "#ff9142",
     opacity: 0.9,
     weight: 3
-  }).addTo(layers.route);
-  map.fitBounds(routePath, { padding: [56, 56], maxZoom: 7 });
+  });
+  mapView.fitPoints(routePath, { padding: 56, maxZoom: 6 });
 }
 
 function renderAtcOnMap(facilities) {
-  layers.atc.clearLayers();
+  const markers = [];
   for (const facility of facilities) {
     const point = getLatLng(facility);
     if (!point) {
       continue;
     }
 
-    L.circleMarker(point, {
-      color: "#5db8ff",
-      fillColor: "#5db8ff",
-      fillOpacity: 0.35,
-      radius: 7,
-      weight: 2
-    }).bindPopup(`<strong>${escapeHtml(getField(facility, "airportName", "AirportName", "name", "Name") || "ATC")}</strong>`).addTo(layers.atc);
+    markers.push({ point, label: getField(facility, "airportName", "AirportName", "name", "Name") || "ATC" });
   }
+
+  mapView.setCircles("atc", markers, {
+    color: "#5db8ff",
+    fillColor: "#5db8ff",
+    fillOpacity: 0.35,
+    radius: 7,
+    weight: 2
+  });
 }
 
 function renderAirportMarkers(airports) {
-  layers.airports.clearLayers();
-  const points = [];
+  const markers = [];
   for (const airport of airports.slice(0, 600)) {
     const point = getLatLng(airport);
     if (!point) {
       continue;
     }
 
-    points.push(point);
-    L.circleMarker(point, {
-      color: "#8493a6",
-      fillColor: "#8493a6",
-      fillOpacity: 0.2,
-      radius: 4,
-      weight: 1
-    }).bindPopup(`<strong>${escapeHtml(getAirportIcao(airport) || "Airport")}</strong>`).addTo(layers.airports);
+    markers.push({ point, label: getAirportIcao(airport) || "Airport" });
   }
 
-  if (points.length > 0) {
-    map.fitBounds(points, { padding: [56, 56], maxZoom: 5 });
-  }
+  mapView.setCircles("airports", markers, {
+    color: "#8493a6",
+    fillColor: "#8493a6",
+    fillOpacity: 0.2,
+    radius: 4,
+    weight: 1
+  });
+  mapView.fitPoints(markers.map(marker => marker.point), { padding: 56, maxZoom: 4 });
 }
 
 function renderTrackMarkers(tracks) {
-  layers.tracks.clearLayers();
-  plotGeoItems(tracks, layers.tracks, {
+  plotGeoItems(tracks, "tracks", {
     color: "#c08bff",
     flyToBounds: true
   });
 }
 
 function plotGeoResults(payload) {
-  layers.geo.clearLayers();
+  mapView.clear("geo");
   const points = collectGeoItems(unwrapResult(payload));
   if (points.length === 0) {
     return;
   }
 
-  plotGeoItems(points, layers.geo, {
+  plotGeoItems(points, "geo", {
     color: "#ff9142",
     flyToBounds: true
   });
 }
 
-function plotGeoItems(items, layer, options = {}) {
-  const points = [];
+function plotGeoItems(items, group, options = {}) {
+  const markers = [];
   for (const item of items) {
     const point = getLatLng(item);
     if (!point) {
       continue;
     }
 
-    points.push(point);
-    L.circleMarker(point, {
-      color: "#fff",
-      fillColor: options.color || "#ff9142",
-      fillOpacity: 0.86,
-      radius: 7,
-      weight: 2
-    }).bindPopup(`<strong>${escapeHtml(getGeoLabel(item))}</strong>`).addTo(layer);
+    markers.push({ point, label: getGeoLabel(item) });
   }
 
-  if (options.flyToBounds && points.length > 0) {
-    map.flyToBounds(points, { duration: 0.55, padding: [56, 56], maxZoom: 7 });
+  mapView.setCircles(group, markers, {
+    color: "#fff",
+    fillColor: options.color || "#ff9142",
+    fillOpacity: 0.86,
+    radius: 7,
+    weight: 2
+  });
+
+  if (options.flyToBounds && markers.length > 0) {
+    mapView.fitPoints(markers.map(marker => marker.point), { duration: 0.55, padding: 56, maxZoom: 6 });
   }
 }
 
@@ -2686,12 +2487,12 @@ function toggleDrawer() {
 }
 
 function invalidateMapSoon() {
-  if (!map) {
+  if (!mapView) {
     return;
   }
 
   window.setTimeout(() => {
-    map.invalidateSize({ animate: false });
+    mapView.resize();
   }, 0);
 }
 
@@ -3388,14 +3189,6 @@ function safePath(definition) {
   } catch {
     return "Select required context";
   }
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function getInitials(value) {
