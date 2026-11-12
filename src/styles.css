@@ -1296,25 +1296,71 @@ body.resizing .drawer {
   z-index: 1;
 }
 
-.leaflet-container {
+#map.maplibregl-map {
   background: #0a0f17;
   font: inherit;
 }
 
-.leaflet-control-zoom {
-  border: 1px solid var(--line) !important;
+#map .maplibregl-ctrl-group {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: none;
 }
 
-.leaflet-control-zoom a {
-  border-color: var(--line) !important;
-  background: var(--panel) !important;
-  color: var(--txt) !important;
+#map .maplibregl-ctrl-group button + button {
+  border-top-color: var(--line);
 }
 
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
+#map .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+#map .maplibregl-ctrl-group button:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#map .maplibregl-ctrl-attrib {
+  background: rgba(11, 16, 24, 0.72);
+  color: var(--txt);
+}
+
+#map .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+
+#map .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+#map .maplibregl-popup-content {
+  border: 1px solid var(--line);
   background: var(--panel);
   color: var(--txt);
+  padding: 8px 26px 8px 10px;
+}
+
+#map .maplibregl-popup-close-button {
+  color: var(--txt);
+}
+
+#map .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+#map .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+#map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--panel);
+}
+
+#map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+#map .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+#map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--panel);
+}
+
+#map .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--panel);
+}
+
+#map .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--panel);
 }
 
 .map-overlay,
@@ -1410,13 +1456,6 @@ body.resizing .drawer {
 .if-marker.selected span {
   border-bottom-color: #fff;
   filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.66));
-}
-
-.aircraft-canvas-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 420;
-  pointer-events: none;
 }
 
 .tabs {
@@ -2406,12 +2445,13 @@ body.hide-bottom .drawer {
   }
 
   .map-legend {
-    bottom: 10px;
+    /* Leave room under the legend for the map attribution (bottom right). */
+    bottom: 40px;
     left: 10px;
     max-width: calc(100% - 20px);
   }
 
-  .leaflet-control-zoom {
+  #map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group {
     display: none;
   }
 

@@ -47,6 +47,8 @@ Some Live schedule write endpoints may appear in the catalog for demonstration, 
 
 The center map shows aircraft returned by the selected session. Click an aircraft to select it, load related APIs, and open the inspector.
 
+The map uses [MapLibre GL JS](https://maplibre.org/) with the free [OpenFreeMap](https://openfreemap.org/) dark basemap, the same basemap as the Live website. It needs no API key or token. The style URL is in `src/maplibre.js`. OpenFreeMap serves only Noto Sans glyphs, so a symbol layer with text must use `'text-font': ['Noto Sans Regular']`.
+
 ### Endpoint Catalog
 
 The left panel lists PublicApi v3 endpoints by category. Click an endpoint to send the request. Disabled endpoints need more context first, such as a selected flight, user, organization, aircraft, or schedule.
